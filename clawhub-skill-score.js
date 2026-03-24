@@ -557,6 +557,69 @@ export async function handleScore(request, env) {
   }
 }
 
+// ── Download (proxy ClawHub download API) ───────────────────────────
+
+export async function handleDownload(request, env) {
+  if (request.method !== "GET") {
+    return { error: "Method not allowed. Use GET.", status: 405 };
+  }
+
+  const url = new URL(request.url);
+  const slug = url.searchParams.get("slug");
+  if (!slug || !slug.trim()) {
+    return { error: "Missing required parameter: slug", status: 400 };
+  }
+
+  const token = env.CLAWHUB_TOKEN;
+  if (!token) {
+    return { error: "Server misconfigured: missing CLAWHUB_TOKEN", status: 500 };
+  }
+
+  const clawhubUrl = new URL("https://clawhub.ai/api/download");
+  clawhubUrl.searchParams.set("slug", slug.trim());
+
+  const version = url.searchParams.get("version");
+  if (version) clawhubUrl.searchParams.set("version", version);
+
+  // Retry with backoff on 429
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const resp = await fetch(clawhubUrl.toString(), {
+      headers: {
+        "User-Agent": "clawhub-skill-score-api/1.0",
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (resp.status === 429 && attempt < 2) {
+      const retryAfter = parseInt(resp.headers.get("Retry-After") || "5", 10);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      return { error: `ClawHub API error ${resp.status}: ${body}`, status: resp.status === 404 ? 404 : 502 };
+    }
+
+    // Return ZIP directly as binary response
+    const zipData = await resp.arrayBuffer();
+    return {
+      raw: new Response(zipData, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${slug.trim()}.zip"`,
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      }),
+    };
+  }
+
+  return { error: "ClawHub API rate limited after retries", status: 429 };
+}
+
 // ── Search (proxy to ClawHub API) ───────────────────────────────────
 
 export async function handleSearch(request, env) {
@@ -629,9 +692,18 @@ export function handleServiceInfo() {
         path: "/clawhub-skill-score/v1/search",
         params: {
           q: { type: "string", required: true, description: "Search query" },
-          limit: { type: "number", required: false, description: "Max results (default: ClawHub default)" },
+          limit: { type: "number", required: false, description: "Max results" },
           highlightedOnly: { type: "boolean", required: false, description: "Filter to highlighted skills only" },
           nonSuspiciousOnly: { type: "boolean", required: false, description: "Filter out suspicious skills" },
+        },
+      },
+      {
+        method: "GET",
+        path: "/clawhub-skill-score/v1/download",
+        description: "Download a skill as ZIP",
+        params: {
+          slug: { type: "string", required: true, description: "Skill slug" },
+          version: { type: "string", required: false, description: "Specific version" },
         },
       },
       {
