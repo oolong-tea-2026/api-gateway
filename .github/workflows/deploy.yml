@@ -20,10 +20,18 @@ jobs:
             -F "clawhub-skill-score.js=@clawhub-skill-score.js;type=application/javascript+module" \
             -F 'metadata={"main_module":"worker.js"};type=application/json'
 
-      - name: Set OPENAI_API_KEY secret
+      - name: Set EMBED_BASE_URL secret
         run: |
           curl -sf -X PUT \
             "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway/secrets" \
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"name":"OPENAI_API_KEY","text":"${{ secrets.OPENAI_API_KEY }}","type":"secret_text"}'
+            -d '{"name":"EMBED_BASE_URL","text":"${{ secrets.EMBED_BASE_URL }}","type":"secret_text"}'
+
+      - name: Set EMBED_API_KEY secret
+        run: |
+          curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway/secrets" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"EMBED_API_KEY","text":"${{ secrets.EMBED_API_KEY }}","type":"secret_text"}'

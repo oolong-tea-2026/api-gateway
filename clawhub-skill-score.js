@@ -255,14 +255,22 @@ function passesTokenFilter(queryTokens, slug, displayName, summary) {
   return queryTokens.some(qt => textTokens.some(tt => tt.startsWith(qt)));
 }
 
-// ── Embedding via OpenAI (uses env secret) ──────────────────────────
+// ── Embedding via Azure OpenAI (matches ClawHub's model exactly) ────
 
-async function getEmbeddings(texts, apiKey) {
-  const resp = await fetch("https://api.openai.com/v1/embeddings", {
+async function getEmbeddings(texts, env) {
+  // Use Azure OpenAI to match ClawHub's exact embedding model
+  const baseUrl = env.EMBED_BASE_URL;
+  const apiKey = env.EMBED_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    throw new Error("Server misconfigured: missing EMBED_BASE_URL or EMBED_API_KEY");
+  }
+
+  const resp = await fetch(baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      "api-key": apiKey,
     },
     body: JSON.stringify({
       input: texts,
@@ -315,7 +323,7 @@ function extractMetadata(skillMdContent, zipRootDir) {
 
 // ── Process zip and compute score ───────────────────────────────────
 
-async function computeScore(zipBuffer, query, opts, apiKey) {
+async function computeScore(zipBuffer, query, opts, env) {
   const files = await extractTextFiles(zipBuffer);
 
   if (files.length === 0) {
@@ -377,7 +385,7 @@ async function computeScore(zipBuffer, query, opts, apiKey) {
 
   // Get embeddings
   const queryTokens = tokenize(query);
-  const [queryEmb, skillEmb] = await getEmbeddings([query, embeddingText], apiKey);
+  const [queryEmb, skillEmb] = await getEmbeddings([query, embeddingText], env);
 
   // Compute scores
   const vectorScore = cosineSimilarity(queryEmb, skillEmb);
@@ -444,9 +452,8 @@ export async function handleScore(request, env) {
     return { error: "Content-Type must be multipart/form-data", status: 400 };
   }
 
-  const apiKey = env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { error: "Server misconfigured: missing embedding API key", status: 500 };
+  if (!env.EMBED_BASE_URL || !env.EMBED_API_KEY) {
+    return { error: "Server misconfigured: missing embedding credentials", status: 500 };
   }
 
   let formData;
@@ -483,7 +490,7 @@ export async function handleScore(request, env) {
 
   try {
     const zipBuffer = await skillFile.arrayBuffer();
-    const result = await computeScore(zipBuffer, query.trim(), { slug, displayName, downloads }, apiKey);
+    const result = await computeScore(zipBuffer, query.trim(), { slug, displayName, downloads }, env);
     return { data: result, status: 200 };
   } catch (e) {
     return { error: e.message, status: 422 };
