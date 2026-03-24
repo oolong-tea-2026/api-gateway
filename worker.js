@@ -1,12 +1,14 @@
 // api.wulong.dev — API Gateway Worker
-// Routes requests to upstream data sources
+// Routes requests to upstream data sources and services
+
+import { handleScore, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
 
 // Use GitHub raw content instead of Pages to avoid redirect issues
 const UPSTREAM = "https://raw.githubusercontent.com/oolong-tea-2026/arena-ai-leaderboards/main/data";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -84,26 +86,41 @@ async function handleArena(path, params) {
   return null;
 }
 
+// POST /clawhub-skill-score/v1/score — score a skill against a query
+async function handleSkillScore(path, request, env) {
+  if (path === "/" || path === "") {
+    return jsonResponse(scoreServiceInfo());
+  }
+
+  if (path === "/score") {
+    const result = await handleScore(request, env);
+    return jsonResponse(result.data || { error: result.error }, result.status);
+  }
+
+  return null;
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    if (request.method !== "GET") {
-      return errorResponse("Method not allowed", 405);
-    }
-
     // Root — service directory
     if (url.pathname === "/" || url.pathname === "") {
+      if (request.method !== "GET") return errorResponse("Method not allowed", 405);
       return jsonResponse({
         name: "api.wulong.dev",
         services: {
           "arena-ai-leaderboards": {
             version: "v1",
             base: "/arena-ai-leaderboards/v1",
+          },
+          "clawhub-skill-score": {
+            version: "v1",
+            base: "/clawhub-skill-score/v1",
           },
         },
       });
@@ -112,8 +129,17 @@ export default {
     // Route: /arena-ai-leaderboards/v1/...
     const arenaPrefix = "/arena-ai-leaderboards/v1";
     if (url.pathname.startsWith(arenaPrefix)) {
+      if (request.method !== "GET") return errorResponse("Method not allowed", 405);
       const subpath = url.pathname.slice(arenaPrefix.length) || "/";
       const result = await handleArena(subpath, url.searchParams);
+      if (result) return result;
+    }
+
+    // Route: /clawhub-skill-score/v1/...
+    const scorePrefix = "/clawhub-skill-score/v1";
+    if (url.pathname.startsWith(scorePrefix)) {
+      const subpath = url.pathname.slice(scorePrefix.length) || "/";
+      const result = await handleSkillScore(subpath, request, env);
       if (result) return result;
     }
 

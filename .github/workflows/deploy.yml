@@ -17,4 +17,13 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway" \
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -F "worker.js=@worker.js;type=application/javascript+module" \
+            -F "clawhub-skill-score.js=@clawhub-skill-score.js;type=application/javascript+module" \
             -F 'metadata={"main_module":"worker.js"};type=application/json'
+
+      - name: Set OPENAI_API_KEY secret
+        run: |
+          curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway/secrets" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"OPENAI_API_KEY","text":"${{ secrets.OPENAI_API_KEY }}","type":"secret_text"}'
