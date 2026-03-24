@@ -557,6 +557,52 @@ export async function handleScore(request, env) {
   }
 }
 
+// ── Detail (proxy ClawHub skill detail API) ─────────────────────────
+
+export async function handleDetail(request, env) {
+  if (request.method !== "GET") {
+    return { error: "Method not allowed. Use GET.", status: 405 };
+  }
+
+  const url = new URL(request.url);
+  const slug = url.searchParams.get("slug");
+  if (!slug || !slug.trim()) {
+    return { error: "Missing required parameter: slug", status: 400 };
+  }
+
+  const token = env.CLAWHUB_TOKEN;
+  if (!token) {
+    return { error: "Server misconfigured: missing CLAWHUB_TOKEN", status: 500 };
+  }
+
+  const clawhubUrl = `https://clawhub.ai/api/v1/skills/${encodeURIComponent(slug.trim())}`;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const resp = await fetch(clawhubUrl, {
+      headers: {
+        "User-Agent": "clawhub-skill-score-api/1.0",
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (resp.status === 429 && attempt < 2) {
+      const retryAfter = parseInt(resp.headers.get("Retry-After") || "5", 10);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      return { error: `ClawHub API error ${resp.status}: ${body}`, status: resp.status === 404 ? 404 : 502 };
+    }
+
+    const data = await resp.json();
+    return { data, status: 200 };
+  }
+
+  return { error: "ClawHub API rate limited after retries", status: 429 };
+}
+
 // ── Download (proxy ClawHub download API) ───────────────────────────
 
 export async function handleDownload(request, env) {
