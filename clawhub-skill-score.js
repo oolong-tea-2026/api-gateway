@@ -642,7 +642,11 @@ export async function handleSearch(request, env) {
   const params = new URLSearchParams({ q: q.trim() });
 
   const limit = url.searchParams.get("limit");
-  if (limit) params.set("limit", limit);
+  if (limit) {
+    const n = parseInt(limit, 10);
+    if (isNaN(n) || n < 1) return { error: "limit must be a positive integer", status: 400 };
+    params.set("limit", String(Math.min(n, 50)));
+  }
 
   const highlightedOnly = url.searchParams.get("highlightedOnly");
   if (highlightedOnly === "true" || highlightedOnly === "1") params.set("highlightedOnly", "true");
