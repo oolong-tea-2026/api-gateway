@@ -642,8 +642,8 @@ export async function handleSearch(request, env) {
   const params = new URLSearchParams({ q: q.trim() });
 
   const limit = url.searchParams.get("limit");
-  if (limit) {
-    const n = parseInt(limit, 10);
+  {
+    const n = limit ? parseInt(limit, 10) : 25;
     if (isNaN(n) || n < 1) return { error: "limit must be a positive integer", status: 400 };
     params.set("limit", String(Math.min(n, 50)));
   }
