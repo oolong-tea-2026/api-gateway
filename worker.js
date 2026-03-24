@@ -1,7 +1,7 @@
 // api.wulong.dev — API Gateway Worker
 // Routes requests to upstream data sources and services
 
-import { handleScore, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
+import { handleScore, handleSearch, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
 
 // Use GitHub raw content instead of Pages to avoid redirect issues
 const UPSTREAM = "https://raw.githubusercontent.com/oolong-tea-2026/arena-ai-leaderboards/main/data";
@@ -94,6 +94,11 @@ async function handleSkillScore(path, request, env) {
 
   if (path === "/score") {
     const result = await handleScore(request, env);
+    return jsonResponse(result.data || { error: result.error }, result.status);
+  }
+
+  if (path === "/search") {
+    const result = await handleSearch(request, env);
     return jsonResponse(result.data || { error: result.error }, result.status);
   }
 

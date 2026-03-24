@@ -35,3 +35,11 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"name":"EMBED_API_KEY","text":"${{ secrets.EMBED_API_KEY }}","type":"secret_text"}'
+
+      - name: Set CLAWHUB_TOKEN secret
+        run: |
+          curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway/secrets" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CLAWHUB_TOKEN","text":"${{ secrets.CLAWHUB_TOKEN }}","type":"secret_text"}'

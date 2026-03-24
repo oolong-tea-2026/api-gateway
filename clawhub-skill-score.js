@@ -557,14 +557,83 @@ export async function handleScore(request, env) {
   }
 }
 
+// ── Search (proxy to ClawHub API) ───────────────────────────────────
+
+export async function handleSearch(request, env) {
+  if (request.method !== "GET") {
+    return { error: "Method not allowed. Use GET.", status: 405 };
+  }
+
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q");
+  if (!q || !q.trim()) {
+    return { error: "Missing required parameter: q", status: 400 };
+  }
+
+  const token = env.CLAWHUB_TOKEN;
+  if (!token) {
+    return { error: "Server misconfigured: missing CLAWHUB_TOKEN", status: 500 };
+  }
+
+  // Build ClawHub API URL
+  const params = new URLSearchParams({ q: q.trim() });
+
+  const limit = url.searchParams.get("limit");
+  if (limit) params.set("limit", limit);
+
+  const highlightedOnly = url.searchParams.get("highlightedOnly");
+  if (highlightedOnly === "true" || highlightedOnly === "1") params.set("highlightedOnly", "true");
+
+  const nonSuspiciousOnly = url.searchParams.get("nonSuspiciousOnly");
+  if (nonSuspiciousOnly === "true" || nonSuspiciousOnly === "1") params.set("nonSuspiciousOnly", "true");
+
+  const clawhubUrl = `https://clawhub.ai/api/v1/search?${params.toString()}`;
+
+  // Retry with backoff on 429
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const resp = await fetch(clawhubUrl, {
+      headers: {
+        "User-Agent": "clawhub-skill-score-api/1.0",
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (resp.status === 429 && attempt < 2) {
+      const retryAfter = parseInt(resp.headers.get("Retry-After") || "5", 10);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      return { error: `ClawHub API error ${resp.status}: ${body}`, status: 502 };
+    }
+
+    const data = await resp.json();
+    return { data, status: 200 };
+  }
+
+  return { error: "ClawHub API rate limited after retries", status: 429 };
+}
+
 // ── Service info ────────────────────────────────────────────────────
 
 export function handleServiceInfo() {
   return {
     service: "clawhub-skill-score",
     version: "v1",
-    description: "Score a skill against a ClawHub search query. Replicates ClawHub's exact scoring pipeline.",
+    description: "ClawHub skill search and scoring API.",
     endpoints: [
+      {
+        method: "GET",
+        path: "/clawhub-skill-score/v1/search",
+        params: {
+          q: { type: "string", required: true, description: "Search query" },
+          limit: { type: "number", required: false, description: "Max results (default: ClawHub default)" },
+          highlightedOnly: { type: "boolean", required: false, description: "Filter to highlighted skills only" },
+          nonSuspiciousOnly: { type: "boolean", required: false, description: "Filter out suspicious skills" },
+        },
+      },
       {
         method: "POST",
         path: "/clawhub-skill-score/v1/score",
