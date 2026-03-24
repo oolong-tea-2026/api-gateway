@@ -8,51 +8,87 @@ Cloudflare Worker powering `api.wulong.dev`.
 
 Daily AI model leaderboard data from [arena.ai](https://arena.ai).
 
+#### List leaderboards
+
+```bash
+# Latest index
+curl https://api.wulong.dev/arena-ai-leaderboards/v1/leaderboards
+
+# Historical index
+curl https://api.wulong.dev/arena-ai-leaderboards/v1/leaderboards?date=2026-03-20
 ```
-GET /arena-ai-leaderboards/v1/leaderboards                              # Latest index
-GET /arena-ai-leaderboards/v1/leaderboards?date=YYYY-MM-DD              # Historical index
-GET /arena-ai-leaderboards/v1/leaderboard?name={slug}                   # Latest leaderboard
-GET /arena-ai-leaderboards/v1/leaderboard?name={slug}&date=YYYY-MM-DD   # Historical
+
+#### Get leaderboard
+
+```bash
+# Latest
+curl https://api.wulong.dev/arena-ai-leaderboards/v1/leaderboard?name=text
+
+# Historical
+curl https://api.wulong.dev/arena-ai-leaderboards/v1/leaderboard?name=text&date=2026-03-20
 ```
+
+---
 
 ### clawhub-skill-score (v1)
 
-ClawHub skill search, scoring, and download API.
+ClawHub skill search, scoring, download, and detail API.
+
+Web UI: [clawhub-scorer.wulong.dev](https://clawhub-scorer.wulong.dev)
 
 #### Search
 
 Search ClawHub skills. Default limit 25, max 50.
 
+```bash
+# Basic search
+curl "https://api.wulong.dev/clawhub-skill-score/v1/search?q=video+generation"
+
+# With limit
+curl "https://api.wulong.dev/clawhub-skill-score/v1/search?q=video+generation&limit=10"
+
+# Filtered
+curl "https://api.wulong.dev/clawhub-skill-score/v1/search?q=video&highlightedOnly=true&nonSuspiciousOnly=true"
 ```
-GET /clawhub-skill-score/v1/search?q={query}
-GET /clawhub-skill-score/v1/search?q={query}&limit=10
-GET /clawhub-skill-score/v1/search?q={query}&highlightedOnly=true
-GET /clawhub-skill-score/v1/search?q={query}&nonSuspiciousOnly=true
+
+#### Detail
+
+Get skill metadata (displayName, downloads, summary, etc.) from ClawHub.
+
+```bash
+curl "https://api.wulong.dev/clawhub-skill-score/v1/detail?slug=weather"
 ```
 
 #### Score
 
 Score a skill ZIP against a search query. Replicates ClawHub's exact 7-stage scoring pipeline: vector similarity (text-embedding-3-small) + lexical boost + popularity boost.
 
-```
-POST /clawhub-skill-score/v1/score
-Content-Type: multipart/form-data
+```bash
+# Score a local skill ZIP
+curl -X POST "https://api.wulong.dev/clawhub-skill-score/v1/score" \
+  -F "query=video generation" \
+  -F "skill=@my-skill.zip" \
+  -F "downloads=42"
 
-Fields:
-  query        (string, required)  Search query
-  skill        (file, required)    Skill folder as ZIP
-  slug         (string, optional)  Override slug (default: zip root dir name)
-  displayName  (string, optional)  Override display name
-  downloads    (number, optional)  Download count (default: 0)
+# With optional overrides
+curl -X POST "https://api.wulong.dev/clawhub-skill-score/v1/score" \
+  -F "query=video generation" \
+  -F "skill=@my-skill.zip" \
+  -F "slug=my-custom-slug" \
+  -F "displayName=My Skill" \
+  -F "downloads=100"
 ```
 
 #### Download
 
 Download a skill as ZIP from ClawHub.
 
-```
-GET /clawhub-skill-score/v1/download?slug={slug}
-GET /clawhub-skill-score/v1/download?slug={slug}&version={version}
+```bash
+# Latest version
+curl -o weather.zip "https://api.wulong.dev/clawhub-skill-score/v1/download?slug=weather"
+
+# Specific version
+curl -o weather.zip "https://api.wulong.dev/clawhub-skill-score/v1/download?slug=weather&version=1.0.0"
 ```
 
 ## Deployment
