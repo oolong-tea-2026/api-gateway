@@ -440,6 +440,70 @@ function round4(n) {
   return Math.round(n * 10000) / 10000;
 }
 
+// ── Multipart form-data parser (preserves binary) ───────────────────
+
+function parseMultipart(buffer, contentType) {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^\s;]+))/);
+  if (!boundaryMatch) throw new Error("No boundary in content-type");
+  const boundary = boundaryMatch[1] || boundaryMatch[2];
+  const boundaryBytes = new TextEncoder().encode("--" + boundary);
+  const data = new Uint8Array(buffer);
+
+  const fields = {};
+  const files = {};
+
+  // Find all boundary positions
+  const positions = [];
+  for (let i = 0; i <= data.length - boundaryBytes.length; i++) {
+    let match = true;
+    for (let j = 0; j < boundaryBytes.length; j++) {
+      if (data[i + j] !== boundaryBytes[j]) { match = false; break; }
+    }
+    if (match) positions.push(i);
+  }
+
+  for (let p = 0; p < positions.length - 1; p++) {
+    const start = positions[p] + boundaryBytes.length;
+    const end = positions[p + 1];
+
+    // Skip CRLF after boundary
+    let headerStart = start;
+    if (data[headerStart] === 0x0d && data[headerStart + 1] === 0x0a) headerStart += 2;
+
+    // Find header/body separator (CRLFCRLF)
+    let bodyStart = -1;
+    for (let i = headerStart; i < end - 3; i++) {
+      if (data[i] === 0x0d && data[i + 1] === 0x0a && data[i + 2] === 0x0d && data[i + 3] === 0x0a) {
+        bodyStart = i + 4;
+        break;
+      }
+    }
+    if (bodyStart === -1) continue;
+
+    const headerText = new TextDecoder().decode(data.slice(headerStart, bodyStart - 4));
+    
+    // Trim trailing CRLF before next boundary
+    let bodyEnd = end;
+    if (bodyEnd >= 2 && data[bodyEnd - 1] === 0x0a && data[bodyEnd - 2] === 0x0d) bodyEnd -= 2;
+
+    const bodyData = data.slice(bodyStart, bodyEnd);
+
+    // Parse name from Content-Disposition
+    const nameMatch = headerText.match(/name="([^"]+)"/);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+
+    const isFile = headerText.includes("filename=");
+    if (isFile) {
+      files[name] = bodyData.buffer.slice(bodyData.byteOffset, bodyData.byteOffset + bodyData.byteLength);
+    } else {
+      fields[name] = new TextDecoder().decode(bodyData);
+    }
+  }
+
+  return { fields, files };
+}
+
 // ── Request handler ─────────────────────────────────────────────────
 
 export async function handleScore(request, env) {
@@ -456,42 +520,29 @@ export async function handleScore(request, env) {
     return { error: "Server misconfigured: missing embedding credentials", status: 500 };
   }
 
-  let formData;
-  try {
-    formData = await request.formData();
-  } catch (e) {
-    return { error: `Failed to parse form data: ${e.message}`, status: 400 };
-  }
+  // Parse multipart manually to handle binary file correctly
+  const body = await request.arrayBuffer();
+  const { fields, files } = parseMultipart(body, contentType);
 
-  const query = formData.get("query");
-  if (!query || typeof query !== "string" || !query.trim()) {
+  const query = fields.query;
+  if (!query || !query.trim()) {
     return { error: "Missing required field: query", status: 400 };
   }
 
-  const skillFile = formData.get("skill");
-  if (!skillFile) {
-    const keys = [];
-    for (const [k, v] of formData.entries()) {
-      keys.push(`${k}: type=${typeof v} ctor=${v?.constructor?.name ?? "?"} size=${v?.size ?? "N/A"}`);
-    }
-    return { error: `Missing 'skill' field. Found fields: [${keys.join("; ")}]`, status: 400 };
+  const zipBuffer = files.skill;
+  if (!zipBuffer) {
+    return { error: "Missing required field: skill (ZIP file)", status: 400 };
   }
 
-  // In Workers, file uploads come as File (or Blob) objects, not strings
-  let zipBuffer;
-  if (typeof skillFile === "string") {
-    return { error: `skill field is a string (length=${skillFile.length}). Expected file upload. Make sure to use -F "skill=@file.zip"`, status: 400 };
-  }
-  try {
-    zipBuffer = await skillFile.arrayBuffer();
-  } catch (e) {
-    return { error: `Failed to read skill file: ${e.message}. Type: ${typeof skillFile}, ctor: ${skillFile?.constructor?.name}`, status: 400 };
+  // Size limit: 5MB
+  if (zipBuffer.byteLength > 5 * 1024 * 1024) {
+    return { error: "ZIP file too large (max 5MB)", status: 413 };
   }
 
   // Optional overrides
-  const slug = formData.get("slug") || undefined;
-  const displayName = formData.get("displayName") || undefined;
-  const downloadsStr = formData.get("downloads");
+  const slug = fields.slug || undefined;
+  const displayName = fields.displayName || undefined;
+  const downloadsStr = fields.downloads;
   const downloads = downloadsStr != null ? parseInt(downloadsStr, 10) : 0;
 
   if (downloadsStr != null && isNaN(downloads)) {
