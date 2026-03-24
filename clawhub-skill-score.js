@@ -470,15 +470,22 @@ export async function handleScore(request, env) {
 
   const skillFile = formData.get("skill");
   if (!skillFile) {
-    // Debug: list all form fields
     const keys = [];
     for (const [k, v] of formData.entries()) {
-      keys.push(`${k}: ${typeof v} ${v?.constructor?.name ?? "?"} size=${v?.size ?? "?"}`);
+      keys.push(`${k}: type=${typeof v} ctor=${v?.constructor?.name ?? "?"} size=${v?.size ?? "N/A"}`);
     }
-    return { error: `Missing 'skill' field. Found: ${keys.join(", ")}`, status: 400 };
+    return { error: `Missing 'skill' field. Found fields: [${keys.join("; ")}]`, status: 400 };
   }
+
+  // In Workers, file uploads come as File (or Blob) objects, not strings
+  let zipBuffer;
   if (typeof skillFile === "string") {
-    return { error: "skill must be a file upload, not a string value", status: 400 };
+    return { error: `skill field is a string (length=${skillFile.length}). Expected file upload. Make sure to use -F "skill=@file.zip"`, status: 400 };
+  }
+  try {
+    zipBuffer = await skillFile.arrayBuffer();
+  } catch (e) {
+    return { error: `Failed to read skill file: ${e.message}. Type: ${typeof skillFile}, ctor: ${skillFile?.constructor?.name}`, status: 400 };
   }
 
   // Optional overrides
@@ -491,13 +498,7 @@ export async function handleScore(request, env) {
     return { error: "downloads must be a number", status: 400 };
   }
 
-  // Size limit: 5MB
-  if (skillFile.size > 5 * 1024 * 1024) {
-    return { error: "ZIP file too large (max 5MB)", status: 413 };
-  }
-
   try {
-    const zipBuffer = await skillFile.arrayBuffer();
     const result = await computeScore(zipBuffer, query.trim(), { slug, displayName, downloads }, env);
     return { data: result, status: 200 };
   } catch (e) {
