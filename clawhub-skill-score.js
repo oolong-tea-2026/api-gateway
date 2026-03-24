@@ -469,8 +469,16 @@ export async function handleScore(request, env) {
   }
 
   const skillFile = formData.get("skill");
-  if (!skillFile || typeof skillFile === "string") {
-    return { error: "Missing required field: skill (ZIP file)", status: 400 };
+  if (!skillFile) {
+    // Debug: list all form fields
+    const keys = [];
+    for (const [k, v] of formData.entries()) {
+      keys.push(`${k}: ${typeof v} ${v?.constructor?.name ?? "?"} size=${v?.size ?? "?"}`);
+    }
+    return { error: `Missing 'skill' field. Found: ${keys.join(", ")}`, status: 400 };
+  }
+  if (typeof skillFile === "string") {
+    return { error: "skill must be a file upload, not a string value", status: 400 };
   }
 
   // Optional overrides
