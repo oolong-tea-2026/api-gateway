@@ -469,7 +469,7 @@ export async function handleScore(request, env) {
   }
 
   const skillFile = formData.get("skill");
-  if (!skillFile || !(skillFile instanceof File)) {
+  if (!skillFile || typeof skillFile === "string") {
     return { error: "Missing required field: skill (ZIP file)", status: 400 };
   }
 
