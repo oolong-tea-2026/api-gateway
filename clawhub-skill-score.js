@@ -33,41 +33,79 @@ const TEXT_FILE_EXTENSIONS = new Set([
  * Minimal ZIP parser — extracts text files from a ZIP buffer.
  * Supports DEFLATE (method 8) and STORED (method 0).
  * No external dependencies.
+ *
+ * Uses the Central Directory (at end of ZIP) to get reliable file sizes,
+ * which fixes the bug where local file headers have compressedSize=0
+ * when the data descriptor flag (bit 3 of general purpose flags) is set.
  */
 function parseZip(buffer) {
   const view = new DataView(buffer);
   const entries = [];
-  let offset = 0;
 
-  while (offset < buffer.byteLength - 4) {
-    const sig = view.getUint32(offset, true);
-    if (sig !== 0x04034b50) break; // Local file header signature
+  // ── Step 1: Find End of Central Directory (EOCD) record ──
+  // EOCD signature = 0x06054b50, located near end of file.
+  // Scan backwards from end (EOCD can have a trailing comment up to 65535 bytes).
+  let eocdOffset = -1;
+  const searchStart = Math.max(0, buffer.byteLength - 65557); // 22 (min EOCD) + 65535 (max comment)
+  for (let i = buffer.byteLength - 22; i >= searchStart; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) {
+    throw new Error("Invalid ZIP: End of Central Directory not found");
+  }
 
-    const method = view.getUint16(offset + 8, true);
-    const compressedSize = view.getUint32(offset + 18, true);
-    const uncompressedSize = view.getUint32(offset + 22, true);
-    const nameLen = view.getUint16(offset + 26, true);
-    const extraLen = view.getUint16(offset + 28, true);
-    const nameBytes = new Uint8Array(buffer, offset + 30, nameLen);
+  const cdEntryCount = view.getUint16(eocdOffset + 10, true);
+  let cdOffset = view.getUint32(eocdOffset + 16, true);
+
+  // ── Step 2: Walk Central Directory entries ──
+  // Central Directory file header signature = 0x02014b50
+  for (let i = 0; i < cdEntryCount; i++) {
+    if (cdOffset + 46 > buffer.byteLength) break;
+    const sig = view.getUint32(cdOffset, true);
+    if (sig !== 0x02014b50) break;
+
+    const method = view.getUint16(cdOffset + 10, true);
+    const compressedSize = view.getUint32(cdOffset + 20, true);
+    const uncompressedSize = view.getUint32(cdOffset + 24, true);
+    const nameLen = view.getUint16(cdOffset + 28, true);
+    const extraLen = view.getUint16(cdOffset + 30, true);
+    const commentLen = view.getUint16(cdOffset + 32, true);
+    const localHeaderOffset = view.getUint32(cdOffset + 42, true);
+
+    const nameBytes = new Uint8Array(buffer, cdOffset + 46, nameLen);
     const name = new TextDecoder().decode(nameBytes);
-    const dataOffset = offset + 30 + nameLen + extraLen;
+
+    // Advance to next CD entry
+    cdOffset += 46 + nameLen + extraLen + commentLen;
+
+    // Skip directories
+    if (name.endsWith("/")) continue;
+
+    // ── Step 3: Read actual data from local file header ──
+    // Local header gives us nameLen + extraLen to find data start
+    // (local extra can differ from CD extra, so we must re-read)
+    if (localHeaderOffset + 30 > buffer.byteLength) continue;
+    const localNameLen = view.getUint16(localHeaderOffset + 26, true);
+    const localExtraLen = view.getUint16(localHeaderOffset + 28, true);
+    const dataOffset = localHeaderOffset + 30 + localNameLen + localExtraLen;
+
+    if (dataOffset + compressedSize > buffer.byteLength) continue;
     const rawData = new Uint8Array(buffer, dataOffset, compressedSize);
 
-    if (!name.endsWith("/")) {
-      let data;
-      if (method === 0) {
-        // STORED
-        data = rawData;
-      } else if (method === 8) {
-        // DEFLATE — use DecompressionStream
-        data = { compressed: rawData, uncompressedSize };
-      } else {
-        data = null; // unsupported method
-      }
-      entries.push({ name, data, method });
+    let data;
+    if (method === 0) {
+      // STORED
+      data = rawData;
+    } else if (method === 8) {
+      // DEFLATE — use DecompressionStream
+      data = { compressed: rawData, uncompressedSize };
+    } else {
+      data = null; // unsupported method
     }
-
-    offset = dataOffset + compressedSize;
+    entries.push({ name, data, method });
   }
 
   return entries;
@@ -330,27 +368,26 @@ async function computeScore(zipBuffer, query, opts, env) {
     throw new Error("ZIP is empty or contains no readable files");
   }
 
-  // Find zip root directory (strip common prefix)
-  let rootDir = "";
-  const firstSlash = files[0]?.name?.indexOf("/");
-  if (firstSlash > 0) {
-    const prefix = files[0].name.slice(0, firstSlash + 1);
-    if (files.every(f => f.name.startsWith(prefix))) {
-      rootDir = prefix.slice(0, -1); // directory name without trailing /
-    }
-  }
-
-  // Normalize paths (strip root prefix)
-  const normalize = (name) => rootDir ? name.slice(rootDir.length + 1) : name;
-
-  // Find SKILL.md
+  // Find SKILL.md — search by basename regardless of directory depth.
+  // This handles: flat ZIPs, single-root ZIPs, and arbitrarily nested ZIPs.
   const skillMdEntry = files.find(f => {
-    const rel = normalize(f.name);
-    return rel === "SKILL.md" || rel.toLowerCase() === "skill.md";
+    const basename = f.name.split("/").pop();
+    return basename === "SKILL.md" || basename?.toLowerCase() === "skill.md";
   });
   if (!skillMdEntry) {
     throw new Error("SKILL.md not found in ZIP");
   }
+
+  // Derive root directory from SKILL.md's path (everything before the basename)
+  // e.g. "my-skill/sub/SKILL.md" → rootDir = "my-skill/sub", so normalize strips that prefix.
+  let rootDir = "";
+  const skillMdDir = skillMdEntry.name.lastIndexOf("/");
+  if (skillMdDir > 0) {
+    rootDir = skillMdEntry.name.slice(0, skillMdDir); // "my-skill/sub"
+  }
+
+  // Normalize paths (strip root prefix + slash)
+  const normalize = (name) => rootDir ? name.slice(rootDir.length + 1) : name;
 
   const skillMdContent = skillMdEntry.content;
   const meta = extractMetadata(skillMdContent, rootDir);
@@ -364,7 +401,7 @@ async function computeScore(zipBuffer, query, opts, env) {
   const otherFiles = [];
   for (const f of files) {
     const rel = normalize(f.name);
-    if (!rel || rel === "SKILL.md") continue;
+    if (!rel || f.name === skillMdEntry.name) continue;
 
     const parts = rel.split("/");
     // Skip dotfiles/directories
