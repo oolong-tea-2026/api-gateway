@@ -91,6 +91,42 @@ curl -o weather.zip "https://api.wulong.dev/clawhub-skill-score/v1/download?slug
 curl -o weather.zip "https://api.wulong.dev/clawhub-skill-score/v1/download?slug=weather&version=1.0.0"
 ```
 
+---
+
+### ima-rank (v1)
+
+IMA Skills ClawHub search ranking tracker. Data sourced from [ima-skills-rank](https://github.com/oolong-tea-2026/ima-skills-rank) repo.
+
+Web UI: [ima-skills-rank.wulong.dev](https://ima-skills-rank.wulong.dev)
+
+#### Config
+
+Get monitoring configuration (tracked skills and keywords).
+
+```bash
+curl https://api.wulong.dev/ima-rank/v1/config
+```
+
+#### Index
+
+List all available snapshot dates.
+
+```bash
+curl https://api.wulong.dev/ima-rank/v1/index
+```
+
+#### Snapshot
+
+Get ranking snapshot for a specific date or latest.
+
+```bash
+# Latest
+curl "https://api.wulong.dev/ima-rank/v1/snapshot?date=latest"
+
+# Specific date
+curl "https://api.wulong.dev/ima-rank/v1/snapshot?date=2026-03-26"
+```
+
 ## Deployment
 
 Push a `release-*` tag to trigger GitHub Actions deployment.
