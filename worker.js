@@ -2,6 +2,7 @@
 // Routes requests to upstream data sources and services
 
 import { handleScore, handleSearch, handleDownload, handleDetail, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
+import { handleConfig as rankConfig, handleIndex as rankIndex, handleSnapshot as rankSnapshot, handleRankInfo } from "./ima-rank.js";
 
 // Use GitHub raw content instead of Pages to avoid redirect issues
 const UPSTREAM = "https://raw.githubusercontent.com/oolong-tea-2026/arena-ai-leaderboards/main/data";
@@ -138,6 +139,10 @@ export default {
             version: "v1",
             base: "/clawhub-skill-score/v1",
           },
+          "ima-rank": {
+            version: "v1",
+            base: "/ima-rank/v1",
+          },
         },
       });
     }
@@ -157,6 +162,29 @@ export default {
       const subpath = url.pathname.slice(scorePrefix.length) || "/";
       const result = await handleSkillScore(subpath, request, env);
       if (result) return result;
+    }
+
+    // Route: /ima-rank/v1/...
+    const rankPrefix = "/ima-rank/v1";
+    if (url.pathname.startsWith(rankPrefix)) {
+      if (request.method !== "GET") return errorResponse("Method not allowed", 405);
+      const subpath = url.pathname.slice(rankPrefix.length) || "/";
+
+      if (subpath === "/" || subpath === "") {
+        return jsonResponse(handleRankInfo());
+      }
+      if (subpath === "/config") {
+        const result = await rankConfig(request);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
+      if (subpath === "/index") {
+        const result = await rankIndex(request);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
+      if (subpath === "/snapshot") {
+        const result = await rankSnapshot(request);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
     }
 
     return errorResponse("Not found", 404);
