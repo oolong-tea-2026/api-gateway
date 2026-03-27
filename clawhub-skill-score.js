@@ -469,6 +469,9 @@ async function computeScore(zipBuffer, query, opts, env) {
       embeddingTruncated: embeddingText.length >= EMBEDDING_MAX_CHARS,
       filesInZip: files.length,
       filesInEmbedding: otherFiles.length + 1, // +1 for SKILL.md
+      embeddingTextFirst500: embeddingText.slice(0, 500),
+      embeddingTextLast500: embeddingText.slice(-500),
+      otherFileNames: otherFiles.map(f => f.name),
     },
   };
 }
