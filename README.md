@@ -190,6 +190,51 @@ When Code Insight is ready, `codeInsight` will contain the AI verdict and analys
 
 ---
 
+### oc-skill-scanner (v1)
+
+OpenClaw security evaluator for skills. Replicates ClawHub's moderation pipeline: static regex scan + LLM security evaluation (gpt-5-mini).
+
+#### Scan
+
+Upload a skill ZIP for full security evaluation. Returns static scan findings + LLM verdict with 5-dimension assessment.
+
+```bash
+curl -X POST "https://api.wulong.dev/oc-skill-scanner/v1/scan" \
+  -F "skill=@my-skill.zip"
+```
+
+Response:
+
+```json
+{
+  "verdict": "clean",
+  "staticScan": {
+    "verdict": "clean",
+    "reasonCodes": [],
+    "findings": []
+  },
+  "llmEval": {
+    "verdict": "benign",
+    "confidence": "high",
+    "summary": "The skill is internally consistent with its stated purpose.",
+    "dimensions": {
+      "purpose_capability": { "status": "ok", "detail": "..." },
+      "instruction_scope": { "status": "ok", "detail": "..." },
+      "install_mechanism": { "status": "ok", "detail": "..." },
+      "environment_proportionality": { "status": "ok", "detail": "..." },
+      "persistence_privilege": { "status": "ok", "detail": "..." }
+    },
+    "guidance": "..."
+  },
+  "files": 6,
+  "usage": { "prompt_tokens": 12234, "completion_tokens": 2049, "total_tokens": 14283 }
+}
+```
+
+Combined verdict: `clean` / `suspicious` / `malicious` (worst of static + LLM).
+
+---
+
 ## Deployment
 
 Push a `release-*` tag to trigger GitHub Actions deployment.
