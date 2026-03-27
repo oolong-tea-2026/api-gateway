@@ -93,6 +93,14 @@ async function handleSkillScore(path, request, env) {
     return jsonResponse(scoreServiceInfo());
   }
 
+  if (path === "/diag") {
+    return jsonResponse({
+      embedBaseUrl: env.EMBED_BASE_URL || "(not set)",
+      hasApiKey: !!(env.EMBED_API_KEY),
+      hasClawhubToken: !!(env.CLAWHUB_TOKEN),
+    });
+  }
+
   if (path === "/score") {
     const result = await handleScore(request, env);
     return jsonResponse(result.data || { error: result.error }, result.status);
