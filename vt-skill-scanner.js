@@ -88,9 +88,30 @@ function buildDeterministicZip(entries) {
   return result;
 }
 
+// ── DEFLATE decompression (CF Workers have DecompressionStream) ─────
+
+async function inflateRawAsync(compressed) {
+  const ds = new DecompressionStream("raw");
+  const writer = ds.writable.getWriter();
+  writer.write(compressed);
+  writer.close();
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { result.set(c, off); off += c.length; }
+  return result;
+}
+
 // ── ZIP parser (read uploaded ZIP) ──────────────────────────────────
 
-function parseZip(buffer) {
+async function parseZip(buffer) {
   const view = new DataView(buffer.buffer || buffer);
   const bytes = new Uint8Array(buffer);
   const files = [];
@@ -123,8 +144,10 @@ function parseZip(buffer) {
     const localExtraLen = view.getUint16(localOffset + 28, true);
     const dataStart = localOffset + 30 + localNameLen + localExtraLen;
 
-    if (compMethod !== 0) continue; // skip non-STORE (we'll handle most ZIPs)
-    const content = bytes.slice(dataStart, dataStart + uncompSize);
+    if (compMethod !== 0 && compMethod !== 8) continue; // STORE or DEFLATE only
+    const content = compMethod === 0
+      ? bytes.slice(dataStart, dataStart + uncompSize)
+      : await inflateRawAsync(bytes.slice(dataStart, dataStart + compSize));
 
     if (!name.endsWith("/")) {
       files.push({ name, bytes: content });
@@ -315,7 +338,7 @@ export async function handleScan(request, env) {
 
   try {
     // Parse uploaded ZIP
-    const rawFiles = parseZip(zipBytes);
+    const rawFiles = await parseZip(zipBytes);
     if (rawFiles.length === 0) {
       return { error: "ZIP contains no files", status: 400 };
     }
