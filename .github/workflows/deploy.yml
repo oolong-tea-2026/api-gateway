@@ -18,6 +18,7 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -F "worker.js=@worker.js;type=application/javascript+module" \
             -F "clawhub-skill-score.js=@clawhub-skill-score.js;type=application/javascript+module" \
+            -F "ima-rank.js=@ima-rank.js;type=application/javascript+module" \
             -F 'metadata={"main_module":"worker.js"};type=application/json'
 
       - name: Set EMBED_BASE_URL secret
