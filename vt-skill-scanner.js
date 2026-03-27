@@ -250,7 +250,7 @@ export async function handleScan(request, env) {
 
   const formData = await request.formData();
   const file = formData.get("skill");
-  if (!file || !(file instanceof Blob)) {
+  if (!file || typeof file === "string" || !file.arrayBuffer) {
     return { error: "Missing required field: skill (ZIP file)", status: 400 };
   }
 
