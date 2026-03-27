@@ -266,7 +266,6 @@ async function runLlmEval(userMessage, env) {
         { role: "user", content: userMessage },
       ],
       max_completion_tokens: 4000,
-      temperature: 0,
       response_format: { type: "json_object" },
     }),
   });
