@@ -3,6 +3,7 @@
 
 import { handleScore, handleSearch, handleDownload, handleDetail, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
 import { handleConfig as rankConfig, handleIndex as rankIndex, handleSnapshot as rankSnapshot, handleRankInfo } from "./ima-rank.js";
+import { handleScan as vtScan, handleResult as vtResult, handleScannerInfo as vtInfo } from "./vt-skill-scanner.js";
 
 // Use GitHub raw content instead of Pages to avoid redirect issues
 const UPSTREAM = "https://raw.githubusercontent.com/oolong-tea-2026/arena-ai-leaderboards/main/data";
@@ -151,6 +152,10 @@ export default {
             version: "v1",
             base: "/ima-rank/v1",
           },
+          "vt-skill-scanner": {
+            version: "v1",
+            base: "/vt-skill-scanner/v1",
+          },
         },
       });
     }
@@ -191,6 +196,24 @@ export default {
       }
       if (subpath === "/snapshot") {
         const result = await rankSnapshot(request);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
+    }
+
+    // Route: /vt-skill-scanner/v1/...
+    const vtPrefix = "/vt-skill-scanner/v1";
+    if (url.pathname.startsWith(vtPrefix)) {
+      const subpath = url.pathname.slice(vtPrefix.length) || "/";
+
+      if (subpath === "/" || subpath === "") {
+        return jsonResponse(vtInfo());
+      }
+      if (subpath === "/scan") {
+        const result = await vtScan(request, env);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
+      if (subpath === "/result") {
+        const result = await vtResult(request, env);
         return jsonResponse(result.data || { error: result.error }, result.status);
       }
     }

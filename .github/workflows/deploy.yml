@@ -19,6 +19,7 @@ jobs:
             -F "worker.js=@worker.js;type=application/javascript+module" \
             -F "clawhub-skill-score.js=@clawhub-skill-score.js;type=application/javascript+module" \
             -F "ima-rank.js=@ima-rank.js;type=application/javascript+module" \
+            -F "vt-skill-scanner.js=@vt-skill-scanner.js;type=application/javascript+module" \
             -F 'metadata={"main_module":"worker.js"};type=application/json'
 
       - name: Set EMBED_BASE_URL secret
@@ -44,3 +45,11 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"name":"CLAWHUB_TOKEN","text":"${{ secrets.CLAWHUB_TOKEN }}","type":"secret_text"}'
+
+      - name: Set VT_API_KEY secret
+        run: |
+          curl -sf -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/workers/scripts/api-gateway/secrets" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"VT_API_KEY","text":"${{ secrets.VT_API_KEY }}","type":"secret_text"}'
