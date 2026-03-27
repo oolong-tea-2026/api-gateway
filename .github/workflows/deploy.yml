@@ -20,6 +20,7 @@ jobs:
             -F "clawhub-skill-score.js=@clawhub-skill-score.js;type=application/javascript+module" \
             -F "ima-rank.js=@ima-rank.js;type=application/javascript+module" \
             -F "vt-skill-scanner.js=@vt-skill-scanner.js;type=application/javascript+module" \
+            -F "oc-skill-scanner.js=@oc-skill-scanner.js;type=application/javascript+module" \
             -F 'metadata={"main_module":"worker.js"};type=application/json'
 
       - name: Set EMBED_BASE_URL secret

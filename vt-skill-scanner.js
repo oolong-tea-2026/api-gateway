@@ -111,7 +111,7 @@ async function inflateRawAsync(compressed) {
 
 // ── ZIP parser (read uploaded ZIP) ──────────────────────────────────
 
-async function parseZip(buffer) {
+export async function parseZip(buffer) {
   const view = new DataView(buffer.buffer || buffer);
   const bytes = new Uint8Array(buffer);
   const files = [];
@@ -159,7 +159,7 @@ async function parseZip(buffer) {
 
 // ── Normalize ZIP entries (strip root dir prefix) ───────────────────
 
-function normalizeEntries(files) {
+export function normalizeEntries(files) {
   // Find common root prefix (e.g., "my-skill/")
   let rootDir = "";
   const skillMd = files.find(f => f.name.toLowerCase().endsWith("skill.md"));
@@ -256,7 +256,7 @@ function formatResults(sha256, vtData) {
 
 // ── Multipart parser (matching clawhub-skill-score.js) ──────────────
 
-function parseMultipart(buffer, contentType) {
+export function parseMultipartForm(buffer, contentType) {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^\s;]+))/);
   if (!boundaryMatch) throw new Error("No boundary in content-type");
   const boundary = boundaryMatch[1] || boundaryMatch[2];
@@ -325,7 +325,7 @@ export async function handleScan(request, env) {
   }
 
   const body = await request.arrayBuffer();
-  const { files: uploadedFiles } = parseMultipart(body, contentType);
+  const { files: uploadedFiles } = parseMultipartForm(body, contentType);
   const zipBytes = uploadedFiles.skill;
 
   if (!zipBytes || zipBytes.length === 0) {

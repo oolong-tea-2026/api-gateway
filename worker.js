@@ -3,7 +3,8 @@
 
 import { handleScore, handleSearch, handleDownload, handleDetail, handleServiceInfo as scoreServiceInfo } from "./clawhub-skill-score.js";
 import { handleConfig as rankConfig, handleIndex as rankIndex, handleSnapshot as rankSnapshot, handleRankInfo } from "./ima-rank.js";
-import { handleScan as vtScan, handleResult as vtResult, handleScannerInfo as vtInfo } from "./vt-skill-scanner.js";
+import { handleScan as vtScan, handleResult as vtResult, handleScannerInfo as vtInfo, parseMultipartForm, parseZip, normalizeEntries } from "./vt-skill-scanner.js";
+import { handleOcScan, handleOcScannerInfo } from "./oc-skill-scanner.js";
 
 // Use GitHub raw content instead of Pages to avoid redirect issues
 const UPSTREAM = "https://raw.githubusercontent.com/oolong-tea-2026/arena-ai-leaderboards/main/data";
@@ -156,6 +157,10 @@ export default {
             version: "v1",
             base: "/vt-skill-scanner/v1",
           },
+          "oc-skill-scanner": {
+            version: "v1",
+            base: "/oc-skill-scanner/v1",
+          },
         },
       });
     }
@@ -214,6 +219,21 @@ export default {
       }
       if (subpath === "/result") {
         const result = await vtResult(request, env);
+        return jsonResponse(result.data || { error: result.error }, result.status);
+      }
+    }
+
+    // Route: /oc-skill-scanner/v1/...
+    const ocPrefix = "/oc-skill-scanner/v1";
+    if (url.pathname.startsWith(ocPrefix)) {
+      const subpath = url.pathname.slice(ocPrefix.length) || "/";
+
+      if (subpath === "/" || subpath === "") {
+        return jsonResponse(handleOcScannerInfo());
+      }
+      if (subpath === "/scan") {
+        const helpers = { parseMultipart: parseMultipartForm, parseZip, normalizeEntries };
+        const result = await handleOcScan(request, env, helpers);
         return jsonResponse(result.data || { error: result.error }, result.status);
       }
     }
