@@ -231,6 +231,59 @@ function formatResults(sha256, vtData) {
   };
 }
 
+// ── Multipart parser (matching clawhub-skill-score.js) ──────────────
+
+function parseMultipart(buffer, contentType) {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^\s;]+))/);
+  if (!boundaryMatch) throw new Error("No boundary in content-type");
+  const boundary = boundaryMatch[1] || boundaryMatch[2];
+  const boundaryBytes = new TextEncoder().encode("--" + boundary);
+  const data = new Uint8Array(buffer);
+
+  const fields = {};
+  const files = {};
+
+  const positions = [];
+  for (let i = 0; i <= data.length - boundaryBytes.length; i++) {
+    let match = true;
+    for (let j = 0; j < boundaryBytes.length; j++) {
+      if (data[i + j] !== boundaryBytes[j]) { match = false; break; }
+    }
+    if (match) positions.push(i);
+  }
+
+  for (let p = 0; p < positions.length - 1; p++) {
+    const start = positions[p] + boundaryBytes.length;
+    const end = positions[p + 1];
+    const part = data.slice(start, end);
+
+    // Find header/body separator
+    let headerEnd = -1;
+    for (let i = 0; i < part.length - 3; i++) {
+      if (part[i] === 13 && part[i+1] === 10 && part[i+2] === 13 && part[i+3] === 10) {
+        headerEnd = i; break;
+      }
+    }
+    if (headerEnd < 0) continue;
+
+    const headerText = new TextDecoder().decode(part.slice(0, headerEnd));
+    const body = part.slice(headerEnd + 4, part.length - 2); // trim trailing \r\n
+
+    const nameMatch = headerText.match(/name="([^"]+)"/);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+
+    const filenameMatch = headerText.match(/filename="([^"]+)"/);
+    if (filenameMatch) {
+      files[name] = body;
+    } else {
+      fields[name] = new TextDecoder().decode(body);
+    }
+  }
+
+  return { fields, files };
+}
+
 // ── Handlers ────────────────────────────────────────────────────────
 
 export async function handleScan(request, env) {
@@ -248,20 +301,21 @@ export async function handleScan(request, env) {
     return { error: "Server misconfigured: missing VT_API_KEY", status: 500 };
   }
 
-  const formData = await request.formData();
-  const file = formData.get("skill");
-  if (!file || typeof file === "string" || !file.arrayBuffer) {
+  const body = await request.arrayBuffer();
+  const { files: uploadedFiles } = parseMultipart(body, contentType);
+  const zipBytes = uploadedFiles.skill;
+
+  if (!zipBytes || zipBytes.length === 0) {
     return { error: "Missing required field: skill (ZIP file)", status: 400 };
   }
 
-  if (file.size > 5 * 1024 * 1024) {
+  if (zipBytes.length > 5 * 1024 * 1024) {
     return { error: "ZIP file too large (max 5MB)", status: 413 };
   }
 
   try {
     // Parse uploaded ZIP
-    const rawBytes = new Uint8Array(await file.arrayBuffer());
-    const rawFiles = parseZip(rawBytes);
+    const rawFiles = parseZip(zipBytes);
     if (rawFiles.length === 0) {
       return { error: "ZIP contains no files", status: 400 };
     }
@@ -287,7 +341,6 @@ export async function handleScan(request, env) {
     }
 
     if (vtData) {
-      // Already in VT, return current results
       return {
         data: {
           ...formatResults(sha256, vtData),
