@@ -212,29 +212,42 @@ function parseFrontmatter(content) {
 
 // ── Deep nested value extraction (matching ClawHub's clawdis logic) ──
 
-function extractClawdis(fm) {
-  // ClawHub checks: parsed.clawdis > parsed.metadata.openclaw > frontmatter direct
-  const meta = fm.metadata || {};
-  const openclaw = (typeof meta === "object" && meta.openclaw) || {};
-  const clawdis = fm.clawdis || openclaw;
+// Fallback regex extraction for nested YAML fields our simple parser misses
+function extractFieldsFromRaw(rawFm) {
+  const result = {};
+  const m = (pattern) => { const r = rawFm.match(pattern); return r ? r[1] : null; };
+  result.primaryEnv = m(/primaryEnv\s*:\s*(\S+)/);
+  result.primaryCredential = m(/primaryCredential\s*:\s*(\S+)/);
+  result.homepage = m(/homepage\s*:\s*(\S+)/);
+  const binsMatch = rawFm.match(/bins:\s*\n((?:\s+-\s+\S+\n?)+)/);
+  if (binsMatch) result.bins = binsMatch[1].match(/- (\S+)/g)?.map(x => x.slice(2)) || [];
+  const envMatch = rawFm.match(/(?:^|\n)\s*env:\s*\n((?:\s+-\s+\S+\n?)+)/);
+  if (envMatch) result.env = envMatch[1].match(/- (\S+)/g)?.map(x => x.slice(2)) || [];
+  const configMatch = rawFm.match(/config:\s*\n((?:\s+-\s+\S+\n?)+)/);
+  if (configMatch) result.config = configMatch[1].match(/- (\S+)/g)?.map(x => x.slice(2)) || [];
+  const alwaysMatch = rawFm.match(/always\s*:\s*(true|false)/);
+  if (alwaysMatch) result.always = alwaysMatch[1] === "true";
+  return result;
+}
 
-  const requires = clawdis.requires || openclaw.requires || fm.requires || {};
-  const install = clawdis.install || [];
+function extractClawdis(fm, rawFm) {
+  // Regex fallback for nested fields
+  const raw = extractFieldsFromRaw(rawFm || "");
 
   return {
-    always: fm.always ?? clawdis.always,
-    userInvocable: fm["user-invocable"] ?? clawdis.userInvocable,
-    disableModelInvocation: fm["disable-model-invocation"] ?? clawdis.disableModelInvocation,
-    os: clawdis.os,
-    primaryEnv: clawdis.primaryEnv || fm.primaryEnv || fm.primaryCredential || "none",
+    always: fm.always ?? raw.always,
+    userInvocable: fm["user-invocable"],
+    disableModelInvocation: fm["disable-model-invocation"],
+    os: fm.os,
+    primaryEnv: raw.primaryEnv || raw.primaryCredential || fm.primaryEnv || fm.primaryCredential || "none",
     requires: {
-      bins: requires.bins || [],
-      anyBins: requires.anyBins || [],
-      env: requires.env || [],
-      config: requires.config || [],
+      bins: raw.bins || [],
+      anyBins: [],
+      env: raw.env || [],
+      config: raw.config || [],
     },
-    install,
-    homepage: clawdis.homepage || fm.homepage || "none",
+    install: [],
+    homepage: raw.homepage || fm.homepage || "none",
   };
 }
 
@@ -401,7 +414,8 @@ const MAX_TOTAL_FILE_CHARS = 50000;
 
 function assembleEvalMessage(skillMdContent, textFiles, fileManifest, staticFindings, injectionSignals) {
   const { fm } = parseFrontmatter(skillMdContent);
-  const clawdis = extractClawdis(fm);
+  const rawFmMatch = skillMdContent.match(/^---\n([\s\S]*?)\n---/);
+  const clawdis = extractClawdis(fm, rawFmMatch ? rawFmMatch[1] : "");
   const requires = clawdis.requires;
 
   const skillMd = skillMdContent.length > MAX_SKILL_MD_CHARS
