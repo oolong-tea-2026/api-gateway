@@ -91,7 +91,7 @@ function buildDeterministicZip(entries) {
 // ── DEFLATE decompression (CF Workers have DecompressionStream) ─────
 
 async function inflateRawAsync(compressed) {
-  const ds = new DecompressionStream("raw");
+  const ds = new DecompressionStream("deflate-raw");
   const writer = ds.writable.getWriter();
   writer.write(compressed);
   writer.close();
