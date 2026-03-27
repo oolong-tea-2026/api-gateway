@@ -41,7 +41,7 @@ export async function handleSnapshot(request) {
     // Fetch index to get latest date
     const indexResult = await githubFetch('index.json');
     if (indexResult.error) return indexResult;
-    date = indexResult.data.latest;
+    date = indexResult.data.latest || (indexResult.data.dates && indexResult.data.dates[indexResult.data.dates.length - 1]);
     if (!date) return { error: 'No snapshots available', status: 404 };
   }
 
