@@ -127,6 +127,69 @@ curl "https://api.wulong.dev/ima-rank/v1/snapshot?date=latest"
 curl "https://api.wulong.dev/ima-rank/v1/snapshot?date=2026-03-26"
 ```
 
+---
+
+### vt-skill-scanner (v1)
+
+VirusTotal security scanner for OpenClaw skills. Uploads skill ZIP to VirusTotal, returns AV engine results and Code Insight (AI analysis).
+
+Internally rebuilds uploaded ZIPs as **deterministic ZIPs** (fixed timestamps, sorted paths) to ensure consistent SHA-256 hashes and VT cache hits.
+
+#### Scan
+
+Upload a skill ZIP for scanning. Returns existing VT results if the hash is already known, otherwise uploads to VT.
+
+```bash
+curl -X POST "https://api.wulong.dev/vt-skill-scanner/v1/scan" \
+  -F "skill=@my-skill.zip"
+```
+
+Response:
+
+```json
+{
+  "sha256": "0165a28d...",
+  "status": "engines_complete",
+  "url": "https://www.virustotal.com/gui/file/0165a28d...",
+  "engines": {
+    "verdict": "undetected",
+    "total": 64,
+    "malicious": 0,
+    "suspicious": 0,
+    "harmless": 0,
+    "undetected": 64
+  },
+  "codeInsight": null,
+  "uploaded": false,
+  "files": 6,
+  "zipSize": 138856
+}
+```
+
+Status values: `pending` → `engines_complete` → `complete` (when Code Insight is available).
+
+#### Result
+
+Poll scan results by SHA-256 hash. Use the hash from the `/scan` response.
+
+```bash
+curl "https://api.wulong.dev/vt-skill-scanner/v1/result?sha256=0165a28de24ca95394520c5998cddf43d084491dca499211ddcfe06d08c3071c"
+```
+
+When Code Insight is ready, `codeInsight` will contain the AI verdict and analysis:
+
+```json
+{
+  "codeInsight": {
+    "verdict": "benign",
+    "analysis": "The skill bundle is classified as benign...",
+    "source": "Code Insight"
+  }
+}
+```
+
+---
+
 ## Deployment
 
 Push a `release-*` tag to trigger GitHub Actions deployment.
@@ -145,6 +208,7 @@ git push origin release-N
 | `EMBED_BASE_URL` | Azure OpenAI embedding endpoint |
 | `EMBED_API_KEY` | Azure OpenAI API key |
 | `CLAWHUB_TOKEN` | ClawHub API token |
+| `VT_API_KEY` | VirusTotal API key |
 
 ## License
 
